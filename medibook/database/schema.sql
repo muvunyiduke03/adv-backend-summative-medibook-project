@@ -36,13 +36,18 @@ CREATE TABLE appointments (
   amount_paid       DECIMAL(10, 2)  NOT NULL DEFAULT 0.00,
   status            ENUM('BOOKED', 'CANCELLED', 'COMPLETED')  NOT NULL DEFAULT 'BOOKED',
   booked_on         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cancelled_at      DATETIME        NULL,
+  refund_amount     DECIMAL(10, 2)  NOT NULL DEFAULT 0.00,
   active_slot       DATETIME GENERATED ALWAYS AS (IF(status = 'CANCELLED', NULL, appt_datetime)) STORED,
   PRIMARY KEY (appointment_id),
-  CONSTRAINT uq_appt_ref UNIQUE (appt_ref),
-  CONSTRAINT uq_doctor_slot     UNIQUE (doctor_id, active_slot),
-  CONSTRAINT chk_slot_30min     CHECK (MINUTE(appt_datetime) IN (0,30) AND SECOND(appt_datetime) = 0),
-  CONSTRAINT chk_working_hours  CHECK (TIME(appt_datetime) BETWEEN '09:00:00' AND '16:30:00'),
-  CONSTRAINT chk_amount_paid    CHECK (amount_paid >= 0),
+  CONSTRAINT uq_appt_ref            UNIQUE (appt_ref),
+  CONSTRAINT uq_doctor_slot         UNIQUE (doctor_id, active_slot),
+  CONSTRAINT chk_slot_30min         CHECK (MINUTE(appt_datetime) IN (0,30) AND SECOND(appt_datetime) = 0),
+  CONSTRAINT chk_working_hours      CHECK (TIME(appt_datetime) BETWEEN '09:00:00' AND '16:30:00'),
+  CONSTRAINT chk_amount_paid        CHECK (amount_paid >= 0),
+  CONSTRAINT chk_refund_amount      CHECK (refund_amount >= 0 AND refund_amount <= amount_paid),
+  CONSTRAINT chk_cancel_state       CHECK ((status = 'CANCELLED' AND cancelled_at IS NOT NULL) OR (status <> 'CANCELLED' AND cancelled_at IS NULL AND refund_amount = 0)),
   CONSTRAINT fk_appt_patient FOREIGN KEY (patient_id) REFERENCES patients (patient_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT fk_appt_doctor  FOREIGN KEY (doctor_id)  REFERENCES doctors (doctor_id) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB;
+
