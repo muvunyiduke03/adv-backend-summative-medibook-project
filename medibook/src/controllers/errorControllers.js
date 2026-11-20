@@ -78,7 +78,7 @@ function errorHandler(err, req, res, next){
 
   // everythin else is a bug.
   console.error(err);
-  return res.status(500).json({error: 'Interval server error'});
+  return res.status(500).json({error: 'Internal server error'});
 }
 
 module.exports = {router_not_matched, errorHandler, catchAsync};

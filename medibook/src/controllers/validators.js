@@ -75,8 +75,8 @@ function validateFields(body, schema){
 
   if (errors.length > 0) {
     throw new AppError(400, 'Validation failed', errors);
-    return clean;
   }
+  return clean;
 }
 
 module.exports = {parseId, validateFields};
