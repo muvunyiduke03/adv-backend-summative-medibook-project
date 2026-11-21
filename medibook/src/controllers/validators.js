@@ -79,4 +79,27 @@ function validateFields(body, schema){
   return clean;
 }
 
-module.exports = {parseId, validateFields};
+function parse_date_time(raw, label = 'appt_datetime'){
+  const m = typeof raw === 'string' && /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(raw.trim());
+
+  if (!m) {
+    throw new AppError(400, `${label} must look like this "YYYY-MM-DD HH:MM"`);
+  }
+
+  const [year, month, day, hour, minute] = m.slice(1, 6).map(Number);
+  const second = m[6] ? Number(m[6]) : 0;
+  const date = new Date(year, month - 1, day, hour, minute, second);
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day || date.getHours() !== hour || date.getMinutes() !== minute || date.getSeconds() !== second) {
+    throw new AppError(400, `${label} is not a real date of the calendar and time`);
+  }
+  return {date, year, month, day, hour, minute, second};
+}
+
+//This will have dates as 'YYYY-MM-DD HH:MM:SS'
+const pad = (n) => String(n).padStart(2, '0');
+function to_sql_date_time(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+module.exports = {parseId, validateFields, parse_date_time, to_sql_date_time};
