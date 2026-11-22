@@ -9,6 +9,28 @@ const first_slot = 9 * 60;
 const last_slot = 16 * 60 + 30;
 const statuses = ['BOOKED', 'CANCELLED', 'COMPLETED'];
 
+// The refund policy is that notice given before 48hour get 100% amount paid and notice of 24hrs - 48hrs you get 50% of amount paid
+const full_refund_hours = 48;
+const half_refund_hours = 24;
+
+function refund_percentage_for(notice_hours) {
+  if (notice_hours > full_refund_hours) {
+    return 100;
+  }
+
+  if (notice_hours >= half_refund_hours) {
+    return 50;
+  }
+
+  return 0;
+}
+
+function not_cancelleable_mssg(id, status) {
+  return status === 'CANCELLED'
+    ? `Appointment ${id} is already cancelled`
+    : `Appointment ${id} is ${status.toLowerCase()} and cannot be cancelled!`;
+}
+
 const list_appointments = catchAsync(async(req, res) => {
   const {doctor_id, patient_id, status} = req.query;
   const filters = {};
@@ -91,4 +113,53 @@ const book_appointment = catchAsync(async(req, res) => {
   }
 });
 
-module.exports = {list_appointments, get_appointment, book_appointment};
+const cancel_appointment = catchAsync(async(req, res) => {
+  const id = parseId(req.params.id, 'appointment_id');
+  const appointment = await appointmentModel.find_by_id(id);
+
+  if (!appointment) {
+    throw new AppError(404, `Appointment with id: ${id} was not found`);
+  }
+
+  if (appointment.status !== 'BOOKED') {
+    throw new AppError(409, not_cancelleable_mssg(id, appointment.status));
+  }
+
+  //this will handle the refund based on the notice given
+  const now = new Date();
+  const starts_at = parse_date_time(appointment.appt_datetime).date;
+
+  if (starts_at <= now){
+    throw new AppError(422, 'An appointment that is already started cannot be cancelled!');
+  }
+
+  const notice_hours = (starts_at - now) / 3600000;
+  const refund_percentage = refund_percentage_for(notice_hours);
+  const result = await appointmentModel.cancellation({
+    appointment_id: id,
+    cancelled_at: to_sql_date_time(now),
+    refund_percentage,
+  });
+
+  if (result.outcome === 'NOT_FOUND') {
+    throw new AppError(404, `An appointment with id ${id} was not found!`);
+  }
+
+  if (result.outcome === 'NOT_CANCELLABLE'){
+    throw new AppError(409, not_cancelleable_mssg(id, result.status));
+  }
+
+  // this will notify about the now free slot on the doctor's list of appointments
+  const cancelled = await appointmentModel.find_by_id(id);
+  res.status(201).location(`/api/appointments/${id}`).json({
+    appointment: cancelled,
+    refund: {
+      notice_hours: Math.round(notice_hours * 100) / 100,
+      refund_percentage,
+      amount_paid: cancelled.amount_paid,
+      refund_amount: cancelled.refund_amount,
+    },
+  });
+});
+
+module.exports = {list_appointments, get_appointment, book_appointment, cancel_appointment, refund_percentage_for};

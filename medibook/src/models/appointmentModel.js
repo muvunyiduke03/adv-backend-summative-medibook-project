@@ -112,4 +112,44 @@ async function booking({patient_id, doctor_id, appt_datetime, day_start, day_end
   }
 }
 
-module.exports = {find_all, find_by_id, booking};
+//The following code will handle cancellation of appointment and refunds
+async function cancellation({appointment_id, cancelled_at, refund_percentage}) {
+  const connection = await pooling.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    //Appointment cancellation of the same appointment will run after each other.
+    const [rows] = await connection.execute(
+      'SELECT status FROM appointments WHERE appointment_id = ? FOR UPDATE',
+      [appointment_id]
+    );
+
+    if (rows.length === 0){
+      await connection.rollback();
+      return {outcome: 'NOT_FOUND'};
+    }
+
+    if (rows[0].status !== 'BOOKED'){
+      await connection.rollback();
+      return {
+        outcome: 'NOT_CANCELLEABLE',
+        status: rows[0].status
+      };
+    }
+
+    await connection.execute(
+      `UPDATE appointments SET status = 'CANCELLED', cancelled_at = ?, refund_amount = ROUND(amount_paid * CAST(? AS DECIMAL(5, 2)) / 100, 2) WHERE appointment_id = ?`,
+      [cancelled_at, refund_percentage, appointment_id]
+    );
+
+    await connection.commit();
+    return {outcome: 'CANCELLED'};
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
+module.exports = {find_all, find_by_id, booking, cancellation};
