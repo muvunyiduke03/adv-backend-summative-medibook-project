@@ -4,7 +4,7 @@ const {parseId, parse_date_time, to_sql_date_time} = require('./validators');
 const {catchAsync} = require('./errorControllers');
 
 //the business rules
-const max_per_day = 12;
+const {max_per_day} = require('./business_rules');
 const first_slot = 9 * 60;
 const last_slot = 16 * 60 + 30;
 const statuses = ['BOOKED', 'CANCELLED', 'COMPLETED'];

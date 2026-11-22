@@ -152,4 +152,41 @@ async function cancellation({appointment_id, cancelled_at, refund_percentage}) {
   }
 }
 
-module.exports = {find_all, find_by_id, booking, cancellation};
+//in this part we will have the advanced SQL that handles the doctor's reports and busy day reports and JS will be used to pass in dates and reading rows.
+async function doctor_stats({doctor_id, now, from_day, to_day, daily_max}){
+  const [money] = await pooling.execute(
+    `SELECT COALESCE(SUM(amount_paid), 0)                       AS gross_collected,
+            COALESCE(SUM(refund_amount), 0)                     AS total_refunded,
+            COALESCE(SUM(amount_paid - refund_amount), 0)       AS net_collected,
+            COUNT(CASE WHEN status = 'BOOKED' AND appt_datetime > ? THEN 1 END) AS upcoming
+      FROM appointments
+      WHERE doctor_id = ?`,
+      [now, doctor_id]
+  );
+
+  const [days] = await pooling.execute(
+    `WITH RECURSIVE days (day) AS (
+        SELECT CAST(? AS DATE)
+        UNION ALL
+        SELECT day + INTERVAL 1 DAY FROM days WHERE day < CAST(? AS DATE)
+    )
+    SELECT d.day                                                              AS date,
+            COUNT(a.appointment_id)                                           AS appointments,
+            ROUND(100 * COUNT(a.appointment_id) / CAST(? AS DECIMAL(5,2)), 1) AS utilization_percent,
+            ROUND(100 * SUM(COUNT(a.appointment_id)) OVER ()
+                  / (COUNT(*) OVER () * CAST(? AS DECIMAL(5,2))), 1)          AS window_utilization_percent,
+            SUM(COUNT(a.appointment_id)) OVER ()                              AS window_appointments
+      FROM days d
+      LEFT JOIN appointments a
+            ON  a.doctor_id = ?
+            AND a.active_slot >= d.day
+            AND a.active_slot < d.day + INTERVAL 1 DAY
+      GROUP BY d.day
+      ORDER BY d.day`,
+      [from_day, to_day, daily_max, daily_max, doctor_id]
+  );
+
+  return {money: money[0], days}
+}
+
+module.exports = {find_all, find_by_id, booking, cancellation, doctor_stats};

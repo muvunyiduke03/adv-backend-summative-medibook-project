@@ -5,6 +5,8 @@ router.route('/')
   .get(control.list_doctors)
   .post(control.create_doctor);
 
+router.get('/:id/stats', control.get_doctor_stats);
+
 router.route('/:id')
   .get(control.get_doctor)
   .put(control.update_doctor)
