@@ -2,6 +2,8 @@
 
 Node.js and Express backend for booking clinic appointments. It uses MySQL 8 (3 tables, no ORM), a Redis waitlist, BullMQ background jobs run by a separate worker process, a file-based audit log, Jest unit tests, and a translated feedback page.
 
+## Video walkthrough:   https://youtu.be/MZUEt7ntpd0
+
 ## Stack
 
 - Node.js 18+, Express, `mysql2/promise` (parameterised queries only)
