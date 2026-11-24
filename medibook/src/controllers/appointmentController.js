@@ -2,6 +2,7 @@ const appointmentModel = require('../models/appointmentModel');
 const AppError = require('./app_errors');
 const {parseId, parse_date_time, to_sql_date_time} = require('./validators');
 const {catchAsync} = require('./errorControllers');
+const {audit_log} = require('./audit_log');
 
 //the business rules
 const {max_per_day} = require('./business_rules');
@@ -108,6 +109,15 @@ const book_appointment = catchAsync(async(req, res) => {
       throw new AppError(409, `Doctor ${doctor_id} is fully booked on this day`);
     default: {
       const appointment = await appointmentModel.find_by_id(result.appointment_id);
+      await audit_log('BOOKING_CREATED', {
+        appointment_id: appointment.appointment_id,
+        appt_ref: appointment.appt_ref,
+        patient_id: appointment.patient_id,
+        doctor_id: appointment.doctor_id,
+        appt_datetime: appointment.appt_datetime,
+        amount_paid: appointment.amount_paid,
+        ip: req.ip,
+      });
       res.status(201).location(`/api/appointments/${result.appointment_id}`).json(appointment);
     }
   }
@@ -151,6 +161,19 @@ const cancel_appointment = catchAsync(async(req, res) => {
 
   // this will notify about the now free slot on the doctor's list of appointments
   const cancelled = await appointmentModel.find_by_id(id);
+  await audit_log('APPOINTMENT_CANCELLED', {
+    appointment_id: cancelled.appointment_id,
+    appt_ref: cancelled.appt_ref,
+    patient_id: cancelled.patient_id,
+    doctor_id: cancelled.doctor_id,
+    appt_datetime: cancelled.appt_datetime,
+    notice_hours: Math.round(notice_hours * 100) / 100,
+    refund_percentage,
+    amount_paid: cancelled.amount_paid,
+    refund_amount: cancelled.refund_amount,
+    ip: req.ip,
+  });
+  
   res.status(201).location(`/api/appointments/${id}`).json({
     appointment: cancelled,
     refund: {
