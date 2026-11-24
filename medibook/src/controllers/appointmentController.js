@@ -9,25 +9,9 @@ const waiting_line = 'Wanna join the waitlist? POST /api/waitlist'
 const {enqueue_slot_freed} = require('./waitlist_jobs');
 
 //the business rules
-const {max_per_day} = require('./business_rules');
-const { request } = require('../app');
+const {max_per_day, refund_percentage_for} = require('./business_rules');
 const statuses = ['BOOKED', 'CANCELLED', 'COMPLETED'];
 
-// The refund policy is that notice given before 48hour get 100% amount paid and notice of 24hrs - 48hrs you get 50% of amount paid
-const full_refund_hours = 48;
-const half_refund_hours = 24;
-
-function refund_percentage_for(notice_hours) {
-  if (notice_hours > full_refund_hours) {
-    return 100;
-  }
-
-  if (notice_hours >= half_refund_hours) {
-    return 50;
-  }
-
-  return 0;
-}
 
 function not_cancelleable_mssg(id, status) {
   return status === 'CANCELLED'
