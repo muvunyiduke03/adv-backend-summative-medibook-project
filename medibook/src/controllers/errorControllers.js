@@ -68,6 +68,10 @@ function errorHandler(err, req, res, next){
     appError = fromMySql(err) || err;
   }
 
+  if(err.name === 'MaxRetriesPerRequestError'){
+    appError = new AppError(503, 'The waitlist is currently unavailable right now. Please try again later.');
+  }
+  
   if (appError instanceof AppError){
     const body = {error: appError.message};
     if (appError.details) {

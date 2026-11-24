@@ -5,5 +5,6 @@ router.use('/patients', require('./patientRoutes'));
 router.use('/doctors', require('./doctorRoutes'));
 router.use('/appointments', require('./appointmentRoutes'));
 router.use('/reports', require('./reportRoutes'));
+router.use('/waitlist', require('./waitlistRoutes'));
 
 module.exports = router;

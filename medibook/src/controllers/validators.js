@@ -102,4 +102,12 @@ function to_sql_date_time(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-module.exports = {parseId, validateFields, parse_date_time, to_sql_date_time};
+function parse_day(raw, label = 'date'){
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new AppError(400, `${label} must look like "YYYY-MM-DD"`);
+  }
+  parse_date_time(`${raw} 00:00`, label);
+  return raw;
+}
+
+module.exports = {parseId, validateFields, parse_date_time, to_sql_date_time, parse_day};

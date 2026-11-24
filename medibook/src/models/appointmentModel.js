@@ -189,4 +189,22 @@ async function doctor_stats({doctor_id, now, from_day, to_day, daily_max}){
   return {money: money[0], days}
 }
 
-module.exports = {find_all, find_by_id, booking, cancellation, doctor_stats};
+async function availability({ doctor_id, patient_id, appt_datetime, day_start, day_end }) {
+  const [rows] = await pooling.execute(
+    `SELECT (SELECT COUNT(*) FROM doctors  WHERE doctor_id  = ?) AS doctor_exists,
+            (SELECT COUNT(*) FROM patients WHERE patient_id = ?) AS patient_exists,
+            (SELECT patient_id FROM appointments WHERE doctor_id = ? AND active_slot = ?) AS slot_holder,
+            (SELECT COUNT(*) FROM appointments
+              WHERE doctor_id = ? AND active_slot >= ? AND active_slot < ?) AS booked`,
+    [doctor_id, patient_id, doctor_id, appt_datetime, doctor_id, day_start, day_end]
+  );
+  const row = rows[0];
+  return {
+    doctor_exists: Number(row.doctor_exists) > 0,
+    patient_exists: Number(row.patient_exists) > 0,
+    slot_holder: row.slot_holder,
+    booked: Number(row.booked),
+  };
+}
+
+module.exports = {find_all, find_by_id, booking, cancellation, doctor_stats, availability};

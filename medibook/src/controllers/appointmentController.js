@@ -3,11 +3,14 @@ const AppError = require('./app_errors');
 const {parseId, parse_date_time, to_sql_date_time} = require('./validators');
 const {catchAsync} = require('./errorControllers');
 const {audit_log} = require('./audit_log');
+const {read_booking_request} = require('./booking_rules');
+const {enqueue_confirmation} = require('./notifications');
+const waiting_line = 'Wanna join the waitlist? POST /api/waitlist'
+const {enqueue_slot_freed} = require('./waitlist_jobs');
 
 //the business rules
 const {max_per_day} = require('./business_rules');
-const first_slot = 9 * 60;
-const last_slot = 16 * 60 + 30;
+const { request } = require('../app');
 const statuses = ['BOOKED', 'CANCELLED', 'COMPLETED'];
 
 // The refund policy is that notice given before 48hour get 100% amount paid and notice of 24hrs - 48hrs you get 50% of amount paid
@@ -64,37 +67,15 @@ const get_appointment = catchAsync(async(req, res) => {
 });
 
 const book_appointment = catchAsync(async(req, res) => {
-  const body = req.body;
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-    throw new AppError(400, 'Request body must be a JSON object');
-  }
+  const request = read_booking_request(req.body);
+  const {patient_id, doctor_id} = request;
 
-  // The following will handle requests and how they are formed
-  const patient_id = parseId(body.patient_id, 'patient_id');
-  const doctor_id = parseId(body.doctor_id, 'doctor_id');
-  const when = parse_date_time(body.appt_datetime);
-
-  if (when.second !== 0 || (when.minute !== 0 && when.minute !== 30)) {
-    throw new AppError(422, 'Appointments must start within a 30 minutes interval');
-  }
-
-  const minutes = when.hour * 60 + when.minute;
-  if (minutes < first_slot || minutes > last_slot){
-    throw new AppError(422, 'Appointments must start 09:00 to 16:30')
-  }
-
-  if(when.date <= new Date()){
-    throw new AppError(422, 'Appointments can only be booked on future dates');
-  }
-
-  const day_start = new Date(when.year, when.month - 1, when.day);
-  const day_end = new Date(when.year, when.month - 1, when.day + 1);
   const result = await appointmentModel.booking({
     patient_id,
     doctor_id,
-    appt_datetime: to_sql_date_time(when.date),
-    day_start: to_sql_date_time(day_start),
-    day_end: to_sql_date_time(day_end),
+    appt_datetime: request.appt_datetime,
+    day_start: request.day_start,
+    day_end: request.day_end,
     max_per_day: max_per_day,
   });
 
@@ -104,9 +85,9 @@ const book_appointment = catchAsync(async(req, res) => {
     case 'PATIENT_NOT_FOUND':
       throw new AppError(404, `Patient with id ${patient_id} was not found`);
     case 'SLOT_TAKEN':
-      throw new AppError(409, 'The doctor is already booked at this time');
+      throw new AppError(409, 'The doctor is already booked at this time',[waiting_line]);
     case 'DAY_IS_FULL':
-      throw new AppError(409, `Doctor ${doctor_id} is fully booked on this day`);
+      throw new AppError(409, `Doctor ${doctor_id} is fully booked on this day`, [waiting_line]);
     default: {
       const appointment = await appointmentModel.find_by_id(result.appointment_id);
       await audit_log('BOOKING_CREATED', {
@@ -118,6 +99,7 @@ const book_appointment = catchAsync(async(req, res) => {
         amount_paid: appointment.amount_paid,
         ip: req.ip,
       });
+      await enqueue_confirmation(appointment.appointment_id);
       res.status(201).location(`/api/appointments/${result.appointment_id}`).json(appointment);
     }
   }
@@ -173,7 +155,8 @@ const cancel_appointment = catchAsync(async(req, res) => {
     refund_amount: cancelled.refund_amount,
     ip: req.ip,
   });
-  
+  await enqueue_slot_freed(cancelled.doctor_id, cancelled.appt_datetime, `cancel${id}`);
+
   res.status(201).location(`/api/appointments/${id}`).json({
     appointment: cancelled,
     refund: {

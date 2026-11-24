@@ -19,14 +19,19 @@ async function init_audit_log() {
 }
 
 //the following will append the one JSON line for successfull booking or cancellation
+async function write_audit(event, details = {}) {
+  const line = JSON.stringify({timeStamp: new Date().toISOString(), event, ...details}) + '\n';
+  await check_logs_dir();
+  await fs.appendFile(log_file, line, 'utf8');
+}
+
+// when a log fails it must not fail the user.
 async function audit_log(event, details = {}) {
-  try {
-    const line = JSON.stringify({timeStamp: new Date().toISOString(), event, ...details}) + '\n';
-    await check_logs_dir();
-    await fs.appendFile(log_file, line, 'utf8');
-  } catch(err){
-    console.error('audit log: could not write entry:', err.message);
+  try{
+    await write_audit(event, details);
+  } catch (err){
+    console.error('Audit Log: We could not write an entry:', err.message);
   }
 }
 
-module.exports = {audit_log, init_audit_log, log_file};
+module.exports = {audit_log, init_audit_log, log_file, write_audit};
